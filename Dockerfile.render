@@ -1,5 +1,5 @@
 # Use a base image with scientific packages pre-installed
-FROM python:3.11-slim
+FROM --platform=linux/amd64 python:3.11-slim
 
 WORKDIR /app
 
@@ -28,6 +28,9 @@ COPY . .
 
 # Create necessary directories
 RUN mkdir -p logs chroma_db
+
+# Make scripts executable
+RUN chmod +x upload_chroma_to_render.py setup_render_chroma.py reingest_on_render.py
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
