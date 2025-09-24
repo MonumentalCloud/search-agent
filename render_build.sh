@@ -7,6 +7,17 @@ echo "Starting build process for search agent..."
 
 # Install Python dependencies
 echo "Installing Python dependencies..."
+
+# Upgrade pip, setuptools, and wheel first
+echo "Upgrading pip, setuptools, and wheel..."
+pip install --upgrade pip setuptools wheel
+
+# Install numpy first with pre-built wheels to avoid build issues
+echo "Installing numpy with pre-built wheels..."
+pip install --only-binary=all numpy
+
+# Install remaining dependencies
+echo "Installing remaining dependencies..."
 pip install -r requirements.txt
 
 # Create necessary directories
