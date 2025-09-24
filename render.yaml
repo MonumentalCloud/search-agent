@@ -2,10 +2,8 @@ services:
   # Main Search Agent Service
   - type: web
     name: search-agent
-    env: python
-    pythonVersion: "3.11"
-    buildCommand: chmod +x render_build.sh && ./render_build.sh
-    startCommand: python render_start.py
+    dockerfilePath: ./Dockerfile.render
+    dockerContext: .
     envVars:
       - key: CONFIG_PATH
         value: configs/default.yaml

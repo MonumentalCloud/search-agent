@@ -15,7 +15,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile.api
+      dockerfile: Dockerfile.render
     depends_on:
       - chroma
     environment:

@@ -1,0 +1,41 @@
+# Use a base image with scientific packages pre-installed
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies for better compatibility
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better layer caching
+COPY requirements.txt .
+
+# Upgrade pip, setuptools, and wheel first
+RUN pip install --upgrade pip setuptools wheel
+
+# Install numpy and scientific packages with pre-built wheels
+RUN pip install --only-binary=all --no-cache-dir \
+    numpy>=1.24.0 \
+    scipy \
+    scikit-learn
+
+# Install remaining dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of the application
+COPY . .
+
+# Create necessary directories
+RUN mkdir -p logs chroma_db
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV CONFIG_PATH=configs/default.yaml
+ENV PYTHONPATH=/app
+
+# Expose the port (Render will set PORT environment variable)
+EXPOSE $PORT
+
+# Command to run the application
+CMD ["python", "render_start.py"]
