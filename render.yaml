@@ -2,6 +2,7 @@ services:
   # Main Search Agent Service
   - type: web
     name: search-agent
+    runtime: docker
     dockerfilePath: ./Dockerfile.render
     dockerContext: .
     envVars:
