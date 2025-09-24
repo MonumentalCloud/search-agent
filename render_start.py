@@ -46,6 +46,7 @@ def main():
     
     # Import and run the SSE server
     try:
+        logger.info("Importing SSE server...")
         from apps.api.sse_server import app
         import uvicorn
         
@@ -57,8 +58,17 @@ def main():
             log_level="info",
             access_log=True
         )
+    except ImportError as e:
+        logger.error(f"Import error: {e}")
+        logger.error("Available modules:")
+        import pkgutil
+        for importer, modname, ispkg in pkgutil.walk_packages(path=['apps'], prefix='apps.'):
+            logger.error(f"  {modname}")
+        sys.exit(1)
     except Exception as e:
         logger.error(f"Failed to start server: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         sys.exit(1)
 
 if __name__ == "__main__":

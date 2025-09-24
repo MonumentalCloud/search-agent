@@ -30,6 +30,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Health check endpoint
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": "search-agent-sse"}
+
 # SSE connection manager
 class SSEManager:
     def __init__(self):
