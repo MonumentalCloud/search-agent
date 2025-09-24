@@ -1,0 +1,535 @@
+#!/usr/bin/env python3
+"""
+Unified Search Agent Control Script
+
+This script provides a single entry point to start and stop all components of the Search Agent:
+- Chroma database
+- API server
+- WebSocket server
+- HTTP frontend server
+- Data ingestion
+
+Usage:
+  python run.py                  # Start everything (full stack)
+  python run.py --api            # Start API server only
+  python run.py --websocket      # Start WebSocket server only
+  python run.py --frontend       # Start frontend HTTP server only
+  python run.py --stop           # Stop all running services
+  python run.py --status         # Show status of all services
+"""
+
+import argparse
+import logging
+import os
+import subprocess
+import sys
+import time
+import json
+import signal
+import socket
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+# Add project root and utils directory to Python path
+project_root = Path(__file__).parent
+sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(project_root / "utils"))
+
+# Load environment variables from .env file
+def load_environment_variables():
+    """Load environment variables from .env file."""
+    env_path = project_root / '.env'
+    if env_path.exists():
+        try:
+            # Try to use python-dotenv if available
+            try:
+                from dotenv import load_dotenv
+                load_dotenv(env_path)
+                print(f"Loaded environment variables from {env_path} using python-dotenv")
+            except ImportError:
+                # Fall back to manual loading
+                with open(env_path, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith('#'):
+                            continue
+                        
+                        key, value = line.split('=', 1)
+                        key = key.strip()
+                        value = value.strip()
+                        
+                        # Set the environment variable
+                        os.environ[key] = value
+                print(f"Loaded environment variables from {env_path} manually")
+            
+            # Check if required environment variables are set
+            required_vars = ['OPENROUTER_API_KEY', 'BGE_API_KEY']
+            missing_vars = [var for var in required_vars if not os.environ.get(var)]
+            
+            if missing_vars:
+                print(f"Warning: Missing required environment variables: {', '.join(missing_vars)}")
+                print("Please add these variables to your .env file")
+                return False
+            
+            # Print the loaded environment variables (masked)
+            for var in required_vars:
+                value = os.environ.get(var, '')
+                masked_value = value[:10] + '...' if value else 'Not set'
+                print(f"  {var}: {masked_value}")
+            
+            return True
+        except Exception as e:
+            print(f"Error loading environment variables: {e}")
+            return False
+    else:
+        print(f"Warning: .env file not found at {env_path}")
+        print("Please create a .env file with your API keys (see env_template.txt)")
+        return False
+
+# Load environment variables
+load_environment_variables()
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, 
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+from utils.pid_manager import PIDManager
+
+# Initialize PIDManager
+pid_manager = PIDManager(pid_file_path=project_root / ".agent_pids")
+
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(description="Search Agent Control Script")
+    
+    # Component selection
+    parser.add_argument("--api", action="store_true", help="Start API server only")
+    parser.add_argument("--websocket", action="store_true", help="Start WebSocket server only")
+    parser.add_argument("--frontend", action="store_true", help="Start frontend HTTP server only")
+    parser.add_argument("--websocket-port", type=int, default=8000, help="WebSocket server port (default: 8000)")
+    parser.add_argument("--api-port", type=int, default=8001, help="API server port (default: 8001)")
+    parser.add_argument("--frontend-port", type=int, default=8081, help="Frontend HTTP server port (default: 8081)")
+    
+    # Control commands
+    parser.add_argument("--stop", action="store_true", help="Stop all running services")
+    parser.add_argument("--status", action="store_true", help="Show status of all services")
+    
+    # Ingestion options
+    parser.add_argument("--force-ingest", action="store_true", help="Force document ingestion")
+    parser.add_argument("--skip-ingest", action="store_true", help="Skip document ingestion (default)")
+    parser.add_argument("--skip-vectors", action="store_true", help="Skip metadata vector rebuild")
+    
+    return parser.parse_args()
+
+def check_chroma_connection() -> bool:
+    """Check if Chroma DB exists and is accessible."""
+    try:
+        chroma_dir = project_root / "chroma_db"
+        return chroma_dir.exists()
+    except Exception:
+        return False
+
+def ingest_docs() -> bool:
+    """Ingest documents from data directory."""
+    logger.info("📄 Ingesting documents from data directory...")
+    
+    data_dir = project_root / "data"
+    if not data_dir.exists():
+        logger.warning(f"⚠️ Data directory not found: {data_dir}")
+        return False
+    
+    try:
+        # Import here to avoid circular imports
+        from ingest_docx import ingest_docx_directory
+        
+        # Ingest DOCX files
+        result = ingest_docx_directory(str(data_dir))
+        
+        if "error" in result:
+            logger.error(f"❌ Document ingestion failed: {result['error']}")
+            return False
+        
+        logger.info(f"✅ Successfully ingested {result.get('documents_ingested', 0)} documents")
+        logger.info(f"   Total chunks: {result.get('total_chunks', 0)}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Document ingestion failed: {e}")
+        return False
+
+def rebuild_metadata_vectors() -> bool:
+    """Rebuild metadata vectors."""
+    logger.info("🔄 Rebuilding metadata vectors...")
+    
+    try:
+        # Check if we're using Chroma
+        if os.path.exists(project_root / "chroma_db"):
+            # Import the metadata vectors module for Chroma
+            try:
+                from ingestion.metadata_vectors_chroma import rebuild_all_facet_vectors
+                
+                # Rebuild the vectors
+                rebuild_all_facet_vectors()
+                
+                logger.info("✅ Successfully rebuilt metadata vectors")
+                return True
+            except ImportError:
+                logger.warning("⚠️ Could not import metadata_vectors_chroma module - skipping vector rebuild")
+                return True
+        else:
+            logger.info("✅ Skipping metadata vector rebuild - using Chroma without vectors")
+            return True
+    
+    except Exception as e:
+        logger.error(f"❌ Error rebuilding metadata vectors: {e}")
+        return False
+
+def start_api_server(port: int = 8001) -> Optional[int]:
+    """Start the API server."""
+    logger.info(f"🚀 Starting API server on 0.0.0.0:{port}...")
+    
+    try:
+        # Start the API server
+        cmd = [
+            sys.executable, "-m", "uvicorn", "apps.api.main:app",
+            "--host", "0.0.0.0", "--port", str(port),
+            "--reload", "--reload-dir", str(project_root)
+        ]
+        
+        # Start the process
+        process = subprocess.Popen(
+            cmd,
+            cwd=project_root,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            universal_newlines=True
+        )
+        
+        # Store the PID
+        pid = process.pid
+        pid_manager.store_pid("api", pid)
+        
+        logger.info(f"✅ API server started with PID: {pid}")
+        return pid
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to start API server: {e}")
+        return None
+
+def start_websocket_server(port: int = 8000) -> Optional[int]:
+    """Start the WebSocket server."""
+    logger.info(f"🚀 Starting WebSocket server on 0.0.0.0:{port}...")
+    
+    try:
+        # Start the WebSocket server
+        cmd = [
+            sys.executable, "-m", "uvicorn", "apps.api.websocket_server:app",
+            "--host", "0.0.0.0", "--port", str(port),
+            "--reload", "--reload-dir", str(project_root)
+        ]
+        
+        # Start the process
+        process = subprocess.Popen(
+            cmd,
+            cwd=project_root,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            universal_newlines=True
+        )
+        
+        # Store the PID
+        pid = process.pid
+        pid_manager.store_pid("websocket_server", pid)
+        
+        logger.info(f"✅ WebSocket server started with PID: {pid}")
+        return pid
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to start WebSocket server: {e}")
+        return None
+
+def start_frontend_server(port: int = 8081) -> Optional[int]:
+    """Start the frontend HTTP server."""
+    logger.info(f"🚀 Starting frontend HTTP server on 0.0.0.0:{port}...")
+    
+    # Check if port is available
+    if not is_port_available(port):
+        logger.warning(f"⚠️ Port {port} is already in use. Trying to find another port...")
+        for alt_port in range(port + 1, port + 10):
+            if is_port_available(alt_port):
+                logger.info(f"✅ Found available port: {alt_port}")
+                port = alt_port
+                break
+        else:
+            logger.error(f"❌ Could not find an available port in range {port}-{port+9}")
+            return None
+    
+    try:
+        # Start the frontend HTTP server
+        cmd = [
+            sys.executable, "-m", "http.server", str(port),
+            "--directory", str(project_root / "frontend")
+        ]
+        
+        # Start the process
+        process = subprocess.Popen(
+            cmd,
+            cwd=project_root,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            universal_newlines=True
+        )
+        
+        # Store the PID
+        pid = process.pid
+        pid_manager.store_pid("frontend_server", pid)
+        
+        logger.info(f"✅ Frontend HTTP server started with PID: {pid}")
+        return pid
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to start frontend HTTP server: {e}")
+        return None
+
+def is_port_available(port: int) -> bool:
+    """Check if a port is available."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("0.0.0.0", port))
+            return True
+    except OSError:
+        return False
+
+def kill_process_on_port(port: int) -> bool:
+    """Kill the process using the specified port."""
+    try:
+        # Find the process using the port
+        cmd = ["lsof", "-i", f":{port}", "-t"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.stdout:
+            pid = int(result.stdout.strip())
+            try:
+                os.kill(pid, signal.SIGTERM)
+                logger.info(f"Terminated process with PID {pid} using port {port}")
+                time.sleep(0.5)  # Give it a moment to terminate
+                
+                # Check if it's still running
+                try:
+                    os.kill(pid, 0)
+                    # If we get here, the process is still running, try SIGKILL
+                    os.kill(pid, signal.SIGKILL)
+                    logger.info(f"Force killed process with PID {pid}")
+                except ProcessLookupError:
+                    # Process already terminated
+                    pass
+                
+                return True
+            except Exception as e:
+                logger.error(f"Failed to kill process with PID {pid}: {e}")
+                return False
+        else:
+            logger.info(f"No process found using port {port}")
+            return True
+    except Exception as e:
+        logger.error(f"Error finding process on port {port}: {e}")
+        return False
+
+def test_system() -> bool:
+    """Test the system with a simple query."""
+    logger.info("🧪 Testing system with a simple query...")
+    
+    try:
+        import requests
+        
+        # Send a test query to the API
+        response = requests.post(
+            "http://localhost:8001/agent/query",
+            json={"query": "Hello, world!"}
+        )
+        
+        if response.status_code == 200:
+            logger.info("✅ System test successful")
+            return True
+        else:
+            logger.error(f"❌ System test failed: {response.status_code} {response.text}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"❌ Error testing system: {e}")
+        return False
+
+def get_service_status() -> Dict[str, Dict[str, any]]:
+    """Get status of all services."""
+    status = {}
+    
+    # Check Chroma DB
+    chroma_ready = check_chroma_connection()
+    status["Chroma DB"] = {
+        "running": chroma_ready,
+        "pid": None,  # Chroma runs in-process
+        "url": None
+    }
+    
+    # Check API server
+    api_pid = pid_manager.get_pid("api")
+    api_running = api_pid is not None and is_process_running(api_pid)
+    status["API Server"] = {
+        "running": api_running,
+        "pid": api_pid,
+        "url": "http://localhost:8001" if api_running else None
+    }
+    
+    # Check WebSocket server
+    websocket_pid = pid_manager.get_pid("websocket_server")
+    websocket_running = websocket_pid is not None and is_process_running(websocket_pid)
+    status["WebSocket Server"] = {
+        "running": websocket_running,
+        "pid": websocket_pid,
+        "url": "ws://localhost:8000" if websocket_running else None
+    }
+    
+    # Check Frontend HTTP server
+    frontend_pid = pid_manager.get_pid("frontend_server")
+    frontend_running = frontend_pid is not None and is_process_running(frontend_pid)
+    status["Frontend HTTP Server"] = {
+        "running": frontend_running,
+        "pid": frontend_pid,
+        "url": "http://localhost:8081" if frontend_running else None
+    }
+    
+    return status
+
+def is_process_running(pid: int) -> bool:
+    """Check if a process with the given PID is running."""
+    try:
+        os.kill(pid, 0)  # Signal 0 does not kill, but checks if PID exists
+        return True
+    except ProcessLookupError:
+        return False
+    except Exception:
+        return False
+
+def print_service_status():
+    """Print status of all services."""
+    status = get_service_status()
+    
+    print("\n=== Search Agent Service Status ===")
+    
+    for service, info in status.items():
+        running = info["running"]
+        status_str = "✅ Running" if running else "❌ Stopped"
+        pid_str = f"(PID: {info['pid']})" if info["pid"] else ""
+        url_str = f"- {info['url']}" if info["url"] else ""
+        
+        print(f"{service}: {status_str} {pid_str} {url_str}")
+    
+    print("\nUse 'python run.py --stop' to stop all services.")
+    print("Use 'python run.py' to start all services.")
+
+def stop_all_services():
+    """Stop all running services."""
+    logger.info("🛑 Stopping all running services...")
+    
+    # Stop managed processes
+    pid_manager.terminate_all_processes()
+    
+    # Also kill processes on common ports
+    for port in [8000, 8001, 8080, 8081]:
+        kill_process_on_port(port)
+    
+    logger.info("✅ All services stopped")
+
+def main():
+    """Main entry point."""
+    args = parse_args()
+    
+    # Stop all services if requested
+    if args.stop:
+        stop_all_services()
+        return
+    
+    # Show status if requested
+    if args.status:
+        print_service_status()
+        return
+    
+    # Check if Chroma is available
+    chroma_ready = check_chroma_connection()
+    if chroma_ready:
+        logger.info("✅ Chroma DB is available")
+    else:
+        logger.warning("⚠️ Chroma DB is not available")
+    
+    # Ingest documents if needed - only do this if force-ingest flag is specified
+    # Default behavior is now to skip ingestion unless explicitly requested
+    should_ingest = args.force_ingest
+    if should_ingest:
+        if not ingest_docs():
+            logger.warning("⚠️ Document ingestion failed - continuing anyway")
+    
+    # Determine which components to start
+    start_api = not (args.websocket or args.frontend)
+    start_websocket = not (args.api or args.frontend) or args.websocket
+    start_frontend = not (args.api or args.websocket) or args.frontend
+    
+    # If no specific component is requested, start everything
+    if not (args.api or args.websocket or args.frontend):
+        start_api = True
+        start_websocket = True
+        start_frontend = True
+    
+    # Rebuild metadata vectors if needed
+    if not args.skip_vectors and (start_api or start_websocket):
+        if not rebuild_metadata_vectors():
+            logger.warning("⚠️ Metadata vector rebuild failed - continuing anyway")
+    
+    # Start API server if requested
+    api_pid = None
+    if start_api:
+        api_pid = start_api_server(port=args.api_port)
+        if api_pid:
+            logger.info(f"🌐 API Server: http://0.0.0.0:{args.api_port}")
+            logger.info(f"   Health: http://0.0.0.0:{args.api_port}/health")
+            logger.info(f"   Docs: http://0.0.0.0:{args.api_port}/docs")
+            
+            # Wait for API server to start
+            logger.info("⏳ Waiting for API server to start...")
+            time.sleep(3)
+            
+            # Test the system
+            test_system()
+    
+    # Start WebSocket server if requested
+    websocket_pid = None
+    if start_websocket:
+        websocket_pid = start_websocket_server(port=args.websocket_port)
+        if websocket_pid:
+            logger.info(f"🌐 WebSocket Server: http://0.0.0.0:{args.websocket_port}")
+    
+    # Start frontend HTTP server if requested
+    frontend_pid = None
+    if start_frontend:
+        frontend_pid = start_frontend_server(port=args.frontend_port)
+        if frontend_pid:
+            logger.info(f"🌐 Frontend HTTP Server: http://0.0.0.0:{args.frontend_port}")
+            logger.info(f"   Open in browser: http://localhost:{args.frontend_port}")
+    
+    # Keep the script running to maintain the processes
+    if api_pid or websocket_pid or frontend_pid:
+        try:
+            logger.info("Press Ctrl+C to stop all services.")
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            stop_all_services()
+
+if __name__ == "__main__":
+    main()

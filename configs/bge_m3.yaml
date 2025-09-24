@@ -1,0 +1,38 @@
+search_backend:
+  weaviate:
+    endpoint: http://localhost:8080
+    api_key: ${WEAVIATE_KEY}
+    classes:
+      document: Document
+      chunk: Chunk
+    default_alpha: 0.5
+    stage1_limit: 300
+    stage3_limit: 200
+facets:
+  names: [doc_type, section, jurisdiction, lang]
+  soft_vector:
+    top_per_facet: 2
+    weight: 0.2
+memory:
+  chunk_bonus_weight: 0.15
+  half_life_weeks: 6
+  exploration_ratio: 0.15
+rerank:
+  provider: local
+  mmr_lambda: 0.4
+validator:
+  max_iters: 2
+  confidence_threshold: 0.75
+llm:
+  provider: openrouter
+  model: deepseek/deepseek-chat-v3.1:free
+  temperature: 0.1
+  api_key: ${OPENROUTER_API_KEY}
+  base_url: null
+
+embeddings:
+  provider: requests
+  model: bge-m3  # Company's BGE-M3 embedding service
+  api_key: ${BGE_API_KEY}  # Set this environment variable
+  base_url: https://genos.genon.ai:3443/api/gateway/rep/serving/10/v1
+  dimensions: 1024  # BGE-M3 produces 1024-dimensional embeddings

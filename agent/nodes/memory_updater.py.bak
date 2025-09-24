@@ -1,0 +1,66 @@
+import logging
+from typing import Dict, Any, List, Optional
+from datetime import datetime
+
+from agent.types import Answer
+from adapters.chroma_adapter import ChromaClient
+from memory.decay import calculate_utility_bonus
+from memory.retrieval_cache import retrieval_cache
+from configs.load import load_yaml_config
+import os
+
+logger = logging.getLogger(__name__)
+
+# Load memory config
+_config = load_yaml_config(os.path.join(os.path.dirname(__file__), "..", "..", "configs", "default.yaml"))
+MEMORY_CONFIG = _config.get("memory", {})
+CHUNK_BONUS_WEIGHT = float(MEMORY_CONFIG.get("chunk_bonus_weight", 0.15))
+HALF_LIFE_WEEKS = int(MEMORY_CONFIG.get("half_life_weeks", 6))
+
+def update_memory(answer: Answer, top: List[Dict[str, Any]], verdict: Dict[str, Any]) -> None:
+    """Update memory utility scores for chunks that were used in the answer."""
+    try:
+        # Get the chunk IDs from the citations in the answer
+        cited_chunk_ids = set()
+        for citation in answer.get("citations", []):
+            chunk_id = citation.get("chunk_id")
+            if chunk_id:
+                cited_chunk_ids.add(chunk_id)
+        
+        logger.info(f"Updating memory for {len(cited_chunk_ids)} cited chunks")
+        
+        # If no chunks were cited, no need to update memory
+        if not cited_chunk_ids:
+            return
+        
+        # Connect to Chroma
+        with ChromaClient() as client:
+            if not client._connected:
+                logger.warning("Chroma not connected, skipping memory update")
+                return
+            
+            # Update each cited chunk
+            for chunk_id in cited_chunk_ids:
+                # Calculate utility bonus
+                utility_bonus = calculate_utility_bonus(
+                    last_useful_at=datetime.now().isoformat(),
+                    half_life_weeks=HALF_LIFE_WEEKS
+                )
+                
+                try:
+                    # Update chunk stats without embeddings
+                    client.update_chunk_stats_without_embedding(chunk_id, {
+                        "useful_count": 1,
+                        "last_useful_at": datetime.now().isoformat(),
+                        "decayed_utility": utility_bonus
+                    })
+                    
+                    # Invalidate cache entries for this chunk
+                    retrieval_cache.invalidate_for_chunk(chunk_id)
+                    
+                    logger.info(f"Updated memory for chunk {chunk_id} with utility bonus {utility_bonus}")
+                except Exception as e:
+                    logger.error(f"Failed to update memory for chunk {chunk_id}: {e}")
+    
+    except Exception as e:
+        logger.error(f"Error updating memory: {e}")

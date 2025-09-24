@@ -1,0 +1,58 @@
+version: '3.8'
+services:
+  # Chroma database service
+  chroma:
+    image: ghcr.io/chroma-core/chroma:latest
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - ALLOW_RESET=true
+      - ANONYMIZED_TELEMETRY=false
+    ports:
+      - "8000:8000"  # Chroma API port
+
+  # FastAPI backend service
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    depends_on:
+      - chroma
+    environment:
+      - CHROMA_HOST=chroma
+      - CHROMA_PORT=8000
+      - PORT=8001
+    ports:
+      - "8001:8001"  # FastAPI port
+    volumes:
+      - ./data:/app/data  # Mount data directory for document ingestion
+
+  # WebSocket server service
+  websocket:
+    build:
+      context: .
+      dockerfile: Dockerfile.websocket
+    depends_on:
+      - api
+      - chroma
+    environment:
+      - API_HOST=api
+      - API_PORT=8001
+      - PORT=8002
+    ports:
+      - "8002:8002"  # WebSocket server port
+
+  # Frontend service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "80:80"  # Frontend port
+    depends_on:
+      - websocket
+    environment:
+      - WEBSOCKET_URL=ws://websocket:8002/ws/agent
+
+volumes:
+  chroma_data:  # Persistent volume for Chroma database

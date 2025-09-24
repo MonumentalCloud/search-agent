@@ -1,0 +1,32 @@
+search_backend:
+  weaviate:
+    endpoint: http://weaviate:8080
+    api_key: ${WEAVIATE_KEY}
+    classes:
+      document: Document
+      chunk: Chunk
+    default_alpha: 0.5
+    stage1_limit: 300
+    stage3_limit: 200
+facets:
+  names: [doc_type, section, jurisdiction, lang]
+  soft_vector:
+    top_per_facet: 2
+    weight: 0.2
+memory:
+  chunk_bonus_weight: 0.15
+  half_life_weeks: 6
+  exploration_ratio: 0.15
+rerank:
+  provider: local
+  mmr_lambda: 0.4
+validator:
+  max_iters: 2
+  confidence_threshold: 0.75
+llm:
+  provider: openai
+  model: gpt-4
+  temperature: 0.1
+  api_key: ${OPENAI_API_KEY}
+  base_url: null  # Uses OpenAI's default
+

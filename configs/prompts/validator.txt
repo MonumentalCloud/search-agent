@@ -1,0 +1,2 @@
+Say YES only if: a primary source chunk supports the main claim; time validity covers claim date; entities match. Otherwise NO with action DRILLDOWN, RELAX, or PIVOT.
+Return only valid JSON: {"valid": bool, "confidence": float, "reason": str, "action": str|null}

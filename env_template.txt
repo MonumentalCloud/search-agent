@@ -1,0 +1,14 @@
+# Environment variables for search_agent
+# Copy this file to .env and fill in your API keys
+
+# OpenRouter API key
+# Get this from https://openrouter.ai/keys
+OPENROUTER_API_KEY=your_openrouter_api_key_here
+
+# BGE Embeddings API key
+# Get this from your BGE embeddings provider
+BGE_API_KEY=your_bge_api_key_here
+
+# Other optional configurations
+# CHROMA_DB_PATH=./chroma_db
+# LOG_LEVEL=INFO

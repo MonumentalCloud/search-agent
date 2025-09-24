@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Environments
+.env
+.venv/
+venv/
+
+# OS
+.DS_Store
+
+# Caches / tooling
+.mypy_cache/
+.pytest_cache/
+.coverage*
+htmlcov/
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# Local data
+logs/
+.tmp/
+chroma_db/
+chroma_db_*/
+fiqa_chroma/
+conversation_memory.db
+*.log
+*.sqlite3
+*.bin
+*.pickle
+
+# Environment files with sensitive data
+.env
+.env.local
+.env.production
+default.yaml
+
+# Deployment packages
+*.zip
+render_deploy/
+search-agent-render-deploy.zip
+
+# API Keys and sensitive configs
+*_keys.txt
+*_secrets.txt
+

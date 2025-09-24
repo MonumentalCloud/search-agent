@@ -1,0 +1,22 @@
+services:
+  # Main Search Agent Service
+  - type: web
+    name: search-agent
+    env: python
+    buildCommand: chmod +x render_build.sh && ./render_build.sh
+    startCommand: python render_start.py
+    envVars:
+      - key: CONFIG_PATH
+        value: configs/default.yaml
+      - key: PYTHONPATH
+        value: .
+      - key: OPENROUTER_API_KEY
+        sync: false  # Set this in Render dashboard
+      - key: BGE_API_KEY
+        sync: false  # Set this in Render dashboard
+    disk:
+      name: chroma-data
+      mountPath: /opt/render/project/src/chroma_db
+      sizeGB: 1
+    healthCheckPath: /health
+    autoDeploy: false  # Set to true if you want auto-deploy from git
