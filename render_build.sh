@@ -12,13 +12,34 @@ echo "Installing Python dependencies..."
 echo "Upgrading pip, setuptools, and wheel..."
 pip install --upgrade pip setuptools wheel
 
-# Install numpy first with pre-built wheels to avoid build issues
-echo "Installing numpy with pre-built wheels..."
-pip install --only-binary=all numpy
+# Set environment variables to prevent building from source
+export NUMPY_BUILD_TIMEOUT=300
+export PIP_NO_BUILD_ISOLATION=1
+export PIP_NO_DEPENDENCIES=0
+export PIP_INDEX_URL=https://pypi.org/simple/
+export PIP_EXTRA_INDEX_URL=""
 
-# Install remaining dependencies
+# Try to install numpy with multiple strategies
+echo "Attempting to install numpy with pre-built wheels..."
+
+# Strategy 1: Try with specific version and pre-built wheels only
+if ! pip install --only-binary=all --no-cache-dir "numpy==1.26.4"; then
+    echo "Strategy 1 failed, trying strategy 2..."
+    
+    # Strategy 2: Try with a more recent version
+    if ! pip install --only-binary=all --no-cache-dir "numpy>=1.24.0,<2.0.0"; then
+        echo "Strategy 2 failed, trying strategy 3..."
+        
+        # Strategy 3: Install without build isolation
+        pip install --no-build-isolation --no-cache-dir "numpy>=1.24.0,<2.0.0"
+    fi
+fi
+
+echo "NumPy installation completed, installing remaining dependencies..."
+
+# Install remaining dependencies with timeout
 echo "Installing remaining dependencies..."
-pip install -r requirements.txt
+pip install --no-cache-dir --timeout 300 -r requirements.txt
 
 # Create necessary directories
 echo "Creating necessary directories..."
