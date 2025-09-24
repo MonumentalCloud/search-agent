@@ -1,0 +1,30 @@
+# Core API framework
+fastapi==0.112.1
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+pydantic-settings==2.4.0
+
+# Vector database
+chromadb==1.0.15
+
+# AI/LLM framework
+langgraph>=0.2.34
+langchain>=0.3.0
+langchain-openai>=0.1.17
+langchain-huggingface==0.1.0
+
+# Core dependencies
+numpy>=1.24.0,<2.0.0
+PyYAML==6.0.2
+httpx>=0.27.0
+python-dotenv==1.0.0
+
+# PDF processing (for ingestion)
+PyPDF2==3.0.1
+pdfplumber==0.10.3
+
+# Utilities
+tqdm==4.66.1
+
+# CPU-only versions (no CUDA)
+# torch, torchvision, torchaudio will be installed separately with CPU-only index

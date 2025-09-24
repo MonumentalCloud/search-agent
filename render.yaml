@@ -3,7 +3,7 @@ services:
   - type: web
     name: search-agent
     runtime: docker
-    dockerfilePath: ./Dockerfile.render
+    dockerfilePath: ./Dockerfile.fast
     dockerContext: .
     envVars:
       - key: CONFIG_PATH

@@ -1,21 +1,24 @@
-# Use a base image with scientific packages pre-installed
+# Fast Dockerfile - CPU only, no CUDA
 FROM --platform=linux/amd64 python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies for better compatibility
+# Install minimal system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip, setuptools, and wheel first
-RUN pip install --upgrade pip setuptools wheel
+# Upgrade pip
+RUN pip install --upgrade pip
 
 # Copy requirements first for better layer caching
 COPY requirements.txt .
 
-# Install dependencies with optimizations
+# Install CPU-only versions of heavy packages
 RUN pip install --no-cache-dir --timeout 300 \
+    --only-binary=all \
+    torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu \
+    && pip install --no-cache-dir --timeout 300 \
     --only-binary=all \
     -r requirements.txt
 

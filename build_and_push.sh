@@ -8,7 +8,7 @@ IMAGE_NAME="cloudsx3/search-agent"  # Replace with your Docker Hub username
 TAG="latest"
 
 echo "Building Docker image locally for linux/amd64 platform..."
-docker build --platform linux/amd64 -f Dockerfile.render -t $IMAGE_NAME:$TAG .
+docker build --platform linux/amd64 -f Dockerfile.fast -t $IMAGE_NAME:$TAG .
 
 echo "Tagging image..."
 docker tag $IMAGE_NAME:$TAG $IMAGE_NAME:latest
