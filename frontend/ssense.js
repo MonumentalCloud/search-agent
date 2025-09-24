@@ -20,10 +20,14 @@ function init() {
     // Set up event listeners
     queryForm.addEventListener('submit', handleQuerySubmit);
     
-    // Debug export event listeners
-    document.getElementById('download-workflow').addEventListener('click', downloadWorkflow);
-    document.getElementById('download-node-updates').addEventListener('click', downloadNodeUpdates);
-    document.getElementById('download-complete-debug').addEventListener('click', downloadCompleteDebug);
+    // Debug export event listeners (only if elements exist)
+    const downloadWorkflowBtn = document.getElementById('download-workflow');
+    const downloadNodeUpdatesBtn = document.getElementById('download-node-updates');
+    const downloadCompleteDebugBtn = document.getElementById('download-complete-debug');
+    
+    if (downloadWorkflowBtn) downloadWorkflowBtn.addEventListener('click', downloadWorkflow);
+    if (downloadNodeUpdatesBtn) downloadNodeUpdatesBtn.addEventListener('click', downloadNodeUpdates);
+    if (downloadCompleteDebugBtn) downloadCompleteDebugBtn.addEventListener('click', downloadCompleteDebug);
 }
 
 // Generate a unique session ID
@@ -33,14 +37,10 @@ function generateSessionId() {
 
 // Connect to SSE
 function connectSSE(queryId) {
-    const protocol = window.location.protocol;
-    const host = window.location.hostname || 'localhost';
-    const port = window.location.port || '8001';
-    
-    // If queryId is provided, include it in the URL to associate this connection with the query
+    // Use relative URL for internal communication on Render
     const sseUrl = queryId 
-        ? `${protocol}//${host}:${port}/sse/agent?query_id=${queryId}` 
-        : `${protocol}//${host}:${port}/sse/agent`;
+        ? `/sse/agent?query_id=${queryId}` 
+        : `/sse/agent`;
     
     console.log(`Connecting to SSE at ${sseUrl}`);
     
@@ -463,11 +463,8 @@ function handleSSEEvent(eventType, eventData) {
 
 // Send a query to the server and handle SSE response
 function sendQuery(query, queryId) {
-    // Always use HTTP protocol for API calls, regardless of how the page was opened
-    const protocol = 'http:';
-    const host = window.location.hostname || 'localhost';
-    const port = window.location.port || '8001';
-    const queryUrl = `${protocol}//${host}:${port}/api/query`;
+    // Use relative URL for internal communication on Render
+    const queryUrl = '/api/query';
     
     console.log(`Sending query to ${queryUrl}`);
     
@@ -482,9 +479,11 @@ function sendQuery(query, queryId) {
     currentNodeUpdates = [];
     currentQueryId = queryId;
     
-    // Hide debug export section
+    // Hide debug export section (only if it exists)
     const debugExport = document.getElementById('debug-export');
-    debugExport.style.display = 'none';
+    if (debugExport) {
+        debugExport.style.display = 'none';
+    }
     
     // Send the query as a POST request and handle SSE response
     fetch(queryUrl, {
