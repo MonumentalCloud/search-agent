@@ -7,7 +7,7 @@ services:
     dockerContext: .
     envVars:
       - key: CONFIG_PATH
-        value: configs/default.yaml
+        value: /app/configs/default.yaml
       - key: PYTHONPATH
         value: .
       - key: OPENROUTER_API_KEY
