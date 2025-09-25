@@ -34,7 +34,16 @@ if env_path.exists():
     load_dotenv(dotenv_path=env_path)
     logger.info(f"Loaded environment variables from {env_path}")
 else:
-    logger.warning(f"No .env file found at {env_path}")
+    logger.info(f"No .env file found at {env_path} - using system environment variables")
+
+# Debug: Check if required environment variables are set
+required_vars = ['OPENROUTER_API_KEY', 'BGE_API_KEY']
+for var in required_vars:
+    value = os.environ.get(var)
+    if value:
+        logger.info(f"{var}: SET (length: {len(value)})")
+    else:
+        logger.warning(f"{var}: NOT SET")
 
 def main():
     """Main startup function for Render deployment."""
