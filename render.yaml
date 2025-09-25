@@ -2,12 +2,13 @@ services:
   # Main Search Agent Service
   - type: web
     name: search-agent
-    runtime: docker
-    dockerfilePath: ./Dockerfile.fast
-    dockerContext: .
+    env: python
+    pythonVersion: "3.11"
+    buildCommand: chmod +x render_build.sh && ./render_build.sh
+    startCommand: python render_start.py
     envVars:
       - key: CONFIG_PATH
-        value: /app/configs/default.yaml
+        value: configs/default.yaml
       - key: PYTHONPATH
         value: .
       - key: OPENROUTER_API_KEY

@@ -1,31 +1,24 @@
 # Fast Dockerfile - CPU only, no CUDA
-FROM ubuntu:22.04
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install Python and system dependencies
+# Install minimal system dependencies
 RUN apt-get update && apt-get install -y \
-    python3.11 \
-    python3.11-pip \
-    python3.11-venv \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Create symlinks for python and pip
-RUN ln -s /usr/bin/python3.11 /usr/bin/python && \
-    ln -s /usr/bin/python3.11 /usr/bin/python3
-
 # Upgrade pip
-RUN python -m pip install --upgrade pip
+RUN pip install --upgrade pip
 
 # Copy requirements first for better layer caching
 COPY requirements.txt .
 
 # Install CPU-only versions of heavy packages
-RUN python -m pip install --no-cache-dir --timeout 300 \
+RUN pip install --no-cache-dir --timeout 300 \
     --only-binary=all \
     torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu \
-    && python -m pip install --no-cache-dir --timeout 300 \
+    && pip install --no-cache-dir --timeout 300 \
     --only-binary=all \
     -r requirements.txt
 
