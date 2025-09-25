@@ -68,6 +68,10 @@ def debug_environment():
             
             # Check if environment variable expansion worked
             print(f"Raw api_key from config: {repr(llm_config.get('api_key'))}")
+            
+            # Check if OPENAI_API_KEY is set (fallback for LangChain)
+            openai_key = os.environ.get('OPENAI_API_KEY')
+            print(f"OPENAI_API_KEY fallback: {'SET' if openai_key else 'NOT SET'}")
         
         print()
         print("=== LLM Initialization Test ===")

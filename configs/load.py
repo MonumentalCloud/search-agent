@@ -142,10 +142,19 @@ def get_default_llm(model: Optional[str] = None):
         )
     elif provider == "openrouter":
         from langchain_openai import ChatOpenAI
+        
+        # Get the API key from config
+        api_key = llm_cfg.get("api_key")
+        if not api_key:
+            raise ValueError("OpenRouter API key not found in configuration")
+        
+        # Set the environment variable as a fallback for LangChain
+        os.environ["OPENAI_API_KEY"] = api_key
+        
         return ChatOpenAI(
             model=llm_cfg.get("model", "openai/gpt-4o-mini"),
             temperature=float(llm_cfg.get("temperature", 0.0)),
-            api_key=llm_cfg.get("api_key"),
+            api_key=api_key,
             base_url=llm_cfg.get("base_url", "https://openrouter.ai/api/v1")
         )
     elif provider == "huggingface":
